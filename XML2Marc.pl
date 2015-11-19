@@ -160,7 +160,6 @@ my $skip = 0;
 my $booklist;
 if ( ! -e $xmlfile . '.dump' ) {
 	$booklist = XMLin( $xmlfile, SuppressEmpty => 1 );
-	print ref( $booklist );
 	store $booklist, $xmlfile . '.dump';
 } else {
 	$booklist = retrieve $xmlfile . '.dump';
