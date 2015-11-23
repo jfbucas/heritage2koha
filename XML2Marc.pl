@@ -39,9 +39,22 @@ sub room_translation {
 		case "LIBRARY"		{	$room = "ML"; }
 		case "DC"		{	$room = "DP"; }
 		case "MACCANA"		{	$room = "MacC"; }
-		case "PROCESSING"	{	$room = "PRO"; }
 		case "REF ONLY"		{	$room = "REF"; }
 		case "SPECIAL-COLLECTION"{	$room = "SC"; }
+		case "P/O"		{}
+		case "CP"		{}
+		case "GQ"		{}
+		case "MAP"		{}
+		case "ML"		{}
+		case "DP"		{}
+		case "LB"		{}
+		case "LD"		{}
+		case "RBC"		{}
+		case "NB"		{}
+		case "OMC"		{}
+		#case "R20"		{}
+		else			{	print "Location unknown: ", $room, "\n";
+						$room = "UNKNOWN"; }
 	}
 	return $room;
 }
@@ -50,13 +63,13 @@ sub room_translation {
 sub medium_translation {
 	my ( $medium )=  @_;
 	switch ( $medium ) {
-		case "MakesWithTheNopes"			{	$medium = "BK"; }
 		#case "Text"			{	$medium = "BK"; }
-		case "Cartographic"		{	$medium = "MP"; }
+		#case "Cartographic"		{	$medium = "MP"; }
 		#case "Pamphlet"			{	$medium = "PA"; }
 		#case "Microfilm/Microfiche"	{	$medium = "MI"; }
 		#case "Compact Disk"		{	$medium = "CD"; }
 		#case "Text &amp; Audio Cassette"	{	$medium = "BKK7"; }
+		#case "Text & Audio Cassette"	{	$medium = "BKK7"; }
 		#case "Text with CD"		{	$medium = "BKCD"; }
 		#case "Text with CDs"		{	$medium = "BKCD"; }
 		#case "Text with DVD"		{	$medium = "BKDVD"; }
@@ -65,9 +78,12 @@ sub medium_translation {
 		#case "Audio Cassette"		{	$medium = "K7"; }
 		#case "Manuscript"		{	$medium = "MU"; }
 		#case "PDF (document image)"	{	$medium = "E-BK"; }
+		#case "E-book"			{	$medium = "E-BK"; }
+		case "Journal"			{	$medium = "J"; }
 		#case "On Order"			{	$medium = "PRINT"; }
 		#else				{	$medium = "PRINT"; }
-		else				{	$medium = "UNKNOWN"; }
+		else				{	#print "Medium unknown: ", $medium, "\n";
+							$medium = "UNKNOWN"; }
 	}
 	return $medium;
 }
@@ -174,6 +190,10 @@ open($fh, '>:utf8', $xmlfile . '.mrc') or die $!;
 my $record;
 my $documenttype = "";
 my $documentcount = 0;
+my $documentcountitems = 0;
+my $documenttypeunknown = 0;
+my $documentr20 = 0;
+my $documentprocessing = 0;
 foreach my $book (@{$booklist->{record}}) {
 
 	# print $book->{ID} . "\n";
@@ -193,6 +213,7 @@ foreach my $book (@{$booklist->{record}}) {
 	}
 
 	if ( $documenttype eq "UNKNOWN" ) {
+		$documenttypeunknown ++;
 		next;
 	}
 	if ( $documenttype eq "PRINT" ) {
@@ -211,10 +232,12 @@ foreach my $book (@{$booklist->{record}}) {
 				}
 			}
 			if ( $skip == 1 ) {
+				$documentr20 ++;
 				next;
 			}
 		} else{
 			if ( $book->{accloc} eq 'R20' ) {
+				$documentr20 ++;
 				next;
 			}
 		}
@@ -232,14 +255,27 @@ foreach my $book (@{$booklist->{record}}) {
 		$record->append_fields($stdno);
 	}
 
-	# isbn
-	if ( exists $book->{isbn} ) {
-		my $isbn = MARC::Field->new(
-			'020',1,'',
-				a => $book->{isbn}
-		);
-		$record->append_fields($isbn);
+	if ( ! $documenttype eq "J" ) {
+		# isbn
+		if ( exists $book->{isbn} ) {
+			my $isbn = MARC::Field->new(
+				'020',1,'',
+					a => $book->{isbn}
+			);
+			$record->append_fields($isbn);
+		}
+	} else {
+		# issn
+		if ( exists $book->{issn} ) {
+			my $issn = MARC::Field->new(
+				'022',1,'',
+					a => $book->{issn}
+			);
+			$record->append_fields($issn);
+		}
 	}
+
+
 
 	# title
 	if ( exists $book->{title} ) {
@@ -251,6 +287,27 @@ foreach my $book (@{$booklist->{record}}) {
 		);
 		$record->append_fields($title);
 	}
+
+	if ( $documenttype eq "J" ) {
+		# prevtitle
+		if ( exists $book->{prevtitle} ) {
+			my $prevtitle = MARC::Field->new(
+				'780',1,'',
+					t => $book->{prevtitle}
+			);
+			$record->append_fields($prevtitle);
+		}
+
+		# nexttitle
+		if ( exists $book->{nexttitle} ) {
+			my $nexttitle = MARC::Field->new(
+				'785',1,'',
+					t => $book->{nexttitle}
+			);
+			$record->append_fields($nexttitle);
+		}
+	}
+
 
 	# edition
 	if ( exists $book->{edition} ) {
@@ -347,6 +404,28 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
+	if ( $documenttype eq "J" ) {
+		# issuingbody
+		if ( exists $book->{issuingbody} ) {
+			my $issuingbody;
+			if( ref($book->{issuingbody}) ) {
+				foreach ( @{$book->{issuingbody}} ) {
+					$issuingbody = MARC::Field->new(
+						'710',2,'',
+							a => $_
+					);
+					$record->append_fields($issuingbody);
+				}
+			} else {
+				$issuingbody = MARC::Field->new(
+					'710',2,'',
+					a => $book->{issuingbody}
+				);
+				$record->append_fields($issuingbody);
+			}
+		}
+	}
+
 	# Get the location based on the class in the case of ML, REF and SC
 	if (( ! exists $book->{accloc} ) &&
 	    ( exists $book->{class} ) ) {
@@ -361,69 +440,112 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
-	# item
-	if (( exists $book->{accloc} ) &&
-	    ( exists $book->{class} ) &&
-	    ( exists $book->{accno} ) ) {
-		if( ref($book->{accloc}) ) {
-			if ( ! ref($book->{class} ) ) {
-				print "Warning: ". $book->{ID}. " Class is missing, using " . $book->{class} . " instead\n";
-				my $class = $book->{class};
-				$book->{class} = qw();
-				foreach ( @{$book->{accno}} ) {
-					push(@{$book->{class}}, $class);
+	if ( ! $documenttype eq "J" ) {
+		# item
+		if (( exists $book->{accloc} ) &&
+		    ( exists $book->{class} ) &&
+		    ( exists $book->{accno} ) ) {
+			if( ref($book->{accloc}) ) {
+				if ( ! ref($book->{class} ) ) {
+					print "Warning: ". $book->{ID}. " Class is missing, using " . $book->{class} . " instead\n";
+					my $class = $book->{class};
+					$book->{class} = qw();
+					foreach ( @{$book->{accno}} ) {
+						push(@{$book->{class}}, $class);
+					}
 				}
-			}
 
-			my $i = 0;
-			foreach ( @{$book->{accloc}} ) {
-				my $room = room_translation( $book->{accloc}->[$i] );
+				my $i = 0;
+				foreach ( @{$book->{accloc}} ) {
+					my $room = room_translation( $book->{accloc}->[$i] );
+					# TODO if medium = MI and room = LD  then room = P/O
+					my $item = MARC::Field->new(
+						'952',1,'',
+							#8 => $documenttype,
+							a => "SCS",
+							b => $location,
+							c => $room,
+							o => $book->{class}->[ $i ],
+							p => $accprefix . $book->{accno}->[ $i ],
+							y => $documenttype
+					);
+					$record->append_fields($item);
+					$i ++;
+					$documentcountitems ++;
+				}
+			} else {
+				my $room = room_translation( $book->{accloc} );
+				# TODO if medium = MI and room = LD  then room = P/O
 				my $item = MARC::Field->new(
 					'952',1,'',
 						#8 => $documenttype,
 						a => "SCS",
 						b => $location,
 						c => $room,
-						o => $book->{class}->[ $i ],
-						p => $accprefix . $book->{accno}->[ $i ],
+						o => $book->{class},
+						p => $accprefix . $book->{accno},
 						y => $documenttype
 				);
 				$record->append_fields($item);
-				$i ++;
+				$documentcountitems ++;
 			}
 		} else {
-			my $room = room_translation( $book->{accloc} );
-			my $item = MARC::Field->new(
-				'952',1,'',
-					#8 => $documenttype,
-					a => "SCS",
-					b => $location,
-					c => $room,
-					o => $book->{class},
-					p => $accprefix . $book->{accno},
-					y => $documenttype
-			);
-			$record->append_fields($item);
+			print "Warning: Cannot create item(s) for record ". $book->{ID};
+			if ( ! exists($book->{accno} ) ) {
+					print " [ AccNo is missing ]";
+			} else {
+					print " [ AccNo " . $book->{accno} . " ]";
+			}
+			if ( ! exists($book->{accloc} ) ) {
+					print " [ AccLoc is missing ]";
+			} else {
+					print " [ AccLoc " . $book->{accloc} . " ]";
+			}
+			if ( ! exists($book->{class} ) ) {
+					print " [ Class is missing ]";
+			} else {
+					print " [ Class " . $book->{class} . " ]";
+			}
+			print "\n";
 		}
 	} else {
-		print "Warning: Cannot create item(s) for record ". $book->{ID};
-		if ( ! exists($book->{accno} ) ) {
-				print " [ AccNo is missing ]";
+		# item
+		if ( exists $book->{holdings} ) {
+			if( ref($book->{holdings}) ) {
+				my $i = 0;
+				my $room = room_translation( $book->{ntloc} );
+				foreach ( @{$book->{holdings}} ) {
+					my $item = MARC::Field->new(
+						'952',1,'',
+							#8 => "JRL",
+							a => "SCS",
+							b => $location,
+							c => $room,
+							y => $documenttype,
+							z => $book->{holdings}->[ $i ]
+					);
+					$record->append_fields($item);
+					$i ++;
+				}
+			} else {
+				my $room = room_translation( $book->{ntloc} );
+				my $item = MARC::Field->new(
+					'952',1,'',
+						#8 => "JRL",
+						a => "SCS",
+						b => $location,
+						c => $room,
+						y => $documenttype,
+						z => $book->{holdings}
+				);
+				$record->append_fields($item);
+			}
 		} else {
-				print " [ AccNo " . $book->{accno} . " ]";
+			print "Cannot create item ". $book->{ID} . "\n";
 		}
-		if ( ! exists($book->{accloc} ) ) {
-				print " [ AccLoc is missing ]";
-		} else {
-				print " [ AccLoc " . $book->{accloc} . " ]";
-		}
-		if ( ! exists($book->{class} ) ) {
-				print " [ Class is missing ]";
-		} else {
-				print " [ Class " . $book->{class} . " ]";
-		}
-		print "\n";
 	}
+
+
 
 	# Create field 260 with a dummy information
 	my $r260 = MARC::Field->new( '260',1,'', z => "dummy" );
@@ -460,6 +582,33 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
+	# imprint
+	if ( exists $book->{imprint} ) {
+		my $imprint;
+		#if ( $book->{imprint} =~ /(.*p\..*):(.*(ill|fac|port|biblio|tables|diag).*);(.*(cm|to|vo).*)/ ) {
+		if ( $book->{imprint} =~ /(.*):(.*);(.*)/ ) {
+			my $a = $1;
+			my $b = $2;
+			my $c = $3;
+			$r260->add_subfields( a => $a );
+			$r260->add_subfields( b => $b );
+			$r260->add_subfields( c => $c );
+			#$imprint = MARC::Field->new( 	'260',1,'', a => $a, b => $b, c => $c );
+		} elsif ( $book->{imprint} =~ /(.*):(.*)/ ) {
+			my $a = $1;
+			my $b = $2;
+			$r260->add_subfields( a => $a );
+			$r260->add_subfields( b => $b );
+			#$imprint = MARC::Field->new( 	'260',1,'', a => $a, b => $b );
+		} else {
+			$r260->add_subfields( a => $book->{imprint} );
+			#$imprint = MARC::Field->new(	'260',1,'', a => $book->{imprint} );
+		}
+		#$record->append_fields($imprint);
+	}
+
+
+
 	# Remove the dummy subfields
 	$r260->delete_subfield( code => 'z' );
 	my @sr260 = $r260->subfields();
@@ -469,28 +618,32 @@ foreach my $book (@{$booklist->{record}}) {
 		$record->append_fields($r260);
 	}
 
-	# collation
-	if ( exists $book->{collation} ) {
-		my $collation;
-		if ( $book->{collation} =~ /(.*p\..*):(.*(ill|fac|port|biblio|tables|diag).*);(.*(cm|to|vo).*)/ ) {
-			my $a = $1;
-			my $b = $2;
-			my $c = $3;
-			$collation = MARC::Field->new( 	'300',1,'', a => $a, b => $b, c => $c );
-		} elsif ( $book->{collation} =~ /(.*p\..*);(.*ill.*):(.*(cm|to|vo).*)/ ) {
-			my $a = $1;
-			my $b = $2;
-			my $c = $3;
-			$collation = MARC::Field->new( 	'300',1,'', a => $a, b => $b, c => $c );
-		} elsif ( $book->{collation} =~ /(.*p\..*);(.*(cm|to|vo).*)/ ) {
-			my $a = $1;
-			my $c = $2;
-			$collation = MARC::Field->new( 	'300',1,'', a => $a, c => $c );
-		} else {
-			$collation = MARC::Field->new(	'300',1,'', a => $book->{collation} );
+	if ( ! $documenttype eq "J" ) {
+		# collation
+		if ( exists $book->{collation} ) {
+			my $collation;
+			if ( $book->{collation} =~ /(.*p\..*):(.*(ill|fac|port|biblio|tables|diag).*);(.*(cm|to|vo).*)/ ) {
+				my $a = $1;
+				my $b = $2;
+				my $c = $3;
+				$collation = MARC::Field->new( 	'300',1,'', a => $a, b => $b, c => $c );
+			} elsif ( $book->{collation} =~ /(.*p\..*);(.*ill.*):(.*(cm|to|vo).*)/ ) {
+				my $a = $1;
+				my $b = $2;
+				my $c = $3;
+				$collation = MARC::Field->new( 	'300',1,'', a => $a, b => $b, c => $c );
+			} elsif ( $book->{collation} =~ /(.*p\..*);(.*(cm|to|vo).*)/ ) {
+				my $a = $1;
+				my $c = $2;
+				$collation = MARC::Field->new( 	'300',1,'', a => $a, c => $c );
+			} else {
+				$collation = MARC::Field->new(	'300',1,'', a => $book->{collation} );
+			}
+			$record->append_fields($collation);
 		}
-		$record->append_fields($collation);
+	} else {
 	}
+
 
 	# subjects
 	if ( exists $book->{subjects} ) {
@@ -533,7 +686,13 @@ foreach my $book (@{$booklist->{record}}) {
 	$record->append_fields($r830);
 
 	# lng
-	my $lng = "110714s||||||||xx||||||||||||||||||eng|d";
+	my $lng;
+	if ( ! $documenttype eq "J" ) {
+		$lng = "110714s||||||||xx||||||||||||||||||eng|d";
+	} else {
+		# Language left as undefined for Serials
+		$lng = "110714s||||||||xx||||||||||||||||||///|d";
+	}
 	if ( exists $book->{lng} ) {
 		substr($lng,35,3) = $book->{lng};
 	}
@@ -561,7 +720,7 @@ foreach my $book (@{$booklist->{record}}) {
 	# Not freeing the memory, but it doesn't matter =-D
 }
 
-print $documentcount, "\n";
+print $documentcount, " ", $documentcountitems, " ", $documentr20, " ", $documenttypeunknown, "\n";
 
 close($fh);
 
