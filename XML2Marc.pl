@@ -30,8 +30,9 @@ use XML::Simple;	# http://search.cpan.org/~grantm/XML-Simple-2.18/lib/XML/Simple
 use MARC::Record;	# http://search.cpan.org/dist/MARC-Record/ by http://wiki.koha-community.org/wiki/Galen_Charlton
 
 # Translate the room number into human compatible version
+# If medium = MI and room = LD  then room = P/O
 sub room_translation {
-	my ( $room )=  @_;
+	my ( $room, $medium )=  @_;
 	switch ( $room ) {
 		case ""			{	$room = "ML"; }
 		case "M"		{	$room = "ML"; }
@@ -48,11 +49,15 @@ sub room_translation {
 		case "ML"		{}
 		case "DP"		{}
 		case "LB"		{}
-		case "LD"		{}
+		case "LP"		{}
+		case "LD"		{	$room = "P/O" if ( $medium eq "MI" ); }
 		case "RBC"		{}
 		case "NB"		{}
 		case "OMC"		{}
-		#case "R20"		{}
+		case "REF"		{	$room = "SKIP"; }
+		case "PROCESSING"	{	$room = "SKIP"; }
+		#case "R20"		{	$room = "SKIP"; }
+		case "R20"		{}
 		else			{	print "Location unknown: ", $room, "\n";
 						$room = "UNKNOWN"; }
 	}
@@ -63,23 +68,24 @@ sub room_translation {
 sub medium_translation {
 	my ( $medium )=  @_;
 	switch ( $medium ) {
-		#case "Text"			{	$medium = "BK"; }
-		#case "Cartographic"		{	$medium = "MP"; }
-		#case "Pamphlet"			{	$medium = "PA"; }
-		#case "Microfilm/Microfiche"	{	$medium = "MI"; }
-		#case "Compact Disk"		{	$medium = "CD"; }
-		#case "Text &amp; Audio Cassette"	{	$medium = "BKK7"; }
-		#case "Text & Audio Cassette"	{	$medium = "BKK7"; }
-		#case "Text with CD"		{	$medium = "BKCD"; }
-		#case "Text with CDs"		{	$medium = "BKCD"; }
-		#case "Text with DVD"		{	$medium = "BKDVD"; }
-		#case "DVD"			{	$medium = "VM"; }
-		#case "Video recording"		{	$medium = "VM"; }
-		#case "Audio Cassette"		{	$medium = "K7"; }
-		#case "Manuscript"		{	$medium = "MU"; }
-		#case "PDF (document image)"	{	$medium = "E-BK"; }
-		#case "E-book"			{	$medium = "E-BK"; }
+		case "Text"			{	$medium = "BK"; }
+		case "Cartographic"		{	$medium = "MP"; }
+		case "Pamphlet"			{	$medium = "PA"; }
+		case "Microfilm/Microfiche"	{	$medium = "MI"; }
+		case "Compact Disk"		{	$medium = "CD"; }
+		case "Text &amp; Audio Cassette"	{	$medium = "BKK7"; }
+		case "Text & Audio Cassette"	{	$medium = "BKK7"; }
+		case "Text with CD"		{	$medium = "BKCD"; }
+		case "Text with CDs"		{	$medium = "BKCD"; }
+		case "Text with DVD"		{	$medium = "BKDVD"; }
+		case "DVD"			{	$medium = "VM"; }
+		case "Video recording"		{	$medium = "VM"; }
+		case "Audio Cassette"		{	$medium = "K7"; }
+		case "Manuscript"		{	$medium = "MU"; }
+		case "PDF (document image)"	{	$medium = "E-BK"; }
+		case "E-book"			{	$medium = "E-BK"; }
 		case "Journal"			{	$medium = "J"; }
+		case "New Book"			{	$medium = "New Book"; }
 		#case "On Order"			{	$medium = "PRINT"; }
 		#else				{	$medium = "PRINT"; }
 		else				{	#print "Medium unknown: ", $medium, "\n";
@@ -88,6 +94,60 @@ sub medium_translation {
 	return $medium;
 }
 
+# Class 81x.xx.. -->  981.6xxx..
+sub class_translation {
+	my ( $class )=  @_;
+	if ( $class =~ /^81([0-9]*\.[0-9]*)/ ) {
+		#print( "Reclassifying $class\t\t-->\t" );
+		$class =~ s/^81([0-9]*)\.([0-9]*)/891.6$1$2/g;
+		#print( $class . "\n" );
+	} elsif ( $class =~ / 81([0-9]*\.[0-9]*)/ ) {
+		#print( "Reclassifying $class\t\t-->\t" );
+		$class =~ s/ 81([0-9]*)\.([0-9]*)/ 891.6$1$2/g;
+		#print( $class . "\n" );
+	}
+	return $class;
+}
+
+# Status translation
+sub status_translation {
+	my ( $status )=  @_;
+	my $lost = 0;
+	my $notforloan = 0;
+	switch ( $status ) {
+		case ""			{	$status = "Available"; }
+		case "Available"	{	$status = "Available"; }
+		case "Retro/Available"	{	$status = "Available"; }
+		case "On Loan"		{	$status = "Available"; }
+		case "On Order"		{	$status = "Available"; }
+		case "Held"		{	$status = "NotForLoan"; $notforloan = 1; }
+		case "Missing"		{	$status = "Missing"; $lost = "4"; }
+		#5     <accstatus>Binding</accstatus>
+		else				{	print "Warning: Status unknown ", $status, "\n";
+							$status = "UNKNOWN"; }
+	}
+	return ($status, $notforloan, $lost);
+}
+
+# Loan type translation
+sub loantype_translation {
+	my ( $loantype )=  @_;
+	switch ( $loantype ) {
+		case ""				{	$loantype = 3; }
+		case "MAIN LIBRARY"		{	$loantype = 3; }
+		case "MAP CABINET"		{	$loantype = 5; }
+		case "One week loan"		{	$loantype = 4; }
+		case "PAMPHLETS/OFFPRINTS"	{	$loantype = 3; }
+		case "Reference only"		{	$loantype = 5; }
+		case "Restricted Access"	{	$loantype = 5; }
+		case "SPECIAL COLLECTION"	{	$loantype = 4; }
+		case "Short loan"		{	$loantype = 4; }
+		case "Standard loan"		{	$loantype = 3; }
+		else				{	print "Warning: Loan type unknown ", $loantype, "\n";
+							$loantype = 0; }
+	}
+	return $loantype;
+}
 # Translate heritage notes into marc format
 sub notes_translation {
 	my ( $notes, $record )=  @_;
@@ -101,7 +161,7 @@ sub notes_translation {
 		} elsif ( $_ =~ "(TIT)" ) {
 			$_ =~ s/\(TIT\) //g;
 			$notescsvx = MARC::Field->new('246',1,'',a => $_);
-		} elsif ( $_ =~ "(OWN)" ) { # TODO Find the correct MARC field
+		} elsif ( $_ =~ "(OWN)" ) {
 			$_ =~ s/\(OWN\) //g;
 			$notescsvx = MARC::Field->new('500',1,'',a => $_);
 		} elsif ( $_ =~ "(BIB)" ) {
@@ -139,7 +199,7 @@ sub notes_translation {
 			$_ =~ s/\(HOL\) /Holdings /g;
 			$_ =~ s/\(CIP\) /Publication date /g;
 			$_ =~ s/\(HIS\) /History and edition /g;
-			$_ =~ s/\(LOC\) /Locution note/g;
+			$_ =~ s/\(LOC\) /Location note /g;
 			$_ =~ s/\(SER\) /Series /g;
 			$_ =~ s/\(EDN\) /Edition /g;
 			$_ =~ s/\(DES\) /Description /g;
@@ -181,6 +241,8 @@ if ( ! -e $xmlfile . '.dump' ) {
 	$booklist = retrieve $xmlfile . '.dump';
 }
 
+# Read XML associated file
+my $assoclist = XMLin( "assoc.xml", SuppressEmpty => 1 );
 
 # Initialize the output
 my $fh;
@@ -192,7 +254,7 @@ my $documenttype = "";
 my $documentcount = 0;
 my $documentcountitems = 0;
 my $documenttypeunknown = 0;
-my $documentr20 = 0;
+my $documentskip = 0;
 my $documentprocessing = 0;
 foreach my $book (@{$booklist->{record}}) {
 
@@ -222,22 +284,29 @@ foreach my $book (@{$booklist->{record}}) {
 	}
 
 
+	# Special case for new books
+	if ( $documenttype eq "New Book" ) {
+		$book->{accloc} = "NB";
+		$documenttype = "BK";
+		print( "Info: New Book ". $book->{ID} . "\n" );
+	}
+
 
 	if ( exists $book->{accloc} ) {
 		if( ref($book->{accloc}) ) {
 			$skip = 0;
 			foreach ( @{$book->{accloc}} ) {
-				if ( $_ eq 'R20' ) {
+				if ( room_translation( $_, $documenttype ) eq 'SKIP' ) {
 					$skip = 1;	
 				}
 			}
 			if ( $skip == 1 ) {
-				$documentr20 ++;
+				$documentskip ++;
 				next;
 			}
 		} else{
-			if ( $book->{accloc} eq 'R20' ) {
-				$documentr20 ++;
+			if ( room_translation( $book->{accloc}, $documenttype ) eq 'SKIP' ) {
+				$documentskip ++;
 				next;
 			}
 		}
@@ -255,7 +324,7 @@ foreach my $book (@{$booklist->{record}}) {
 		$record->append_fields($stdno);
 	}
 
-	if ( ! $documenttype eq "J" ) {
+	if ( $documenttype ne "J" ) {
 		# isbn
 		if ( exists $book->{isbn} ) {
 			my $isbn = MARC::Field->new(
@@ -440,28 +509,221 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
-	if ( ! $documenttype eq "J" ) {
+	if ( $documenttype ne "J" ) {
+		# Fix Room20 missing class
+		if (( exists $book->{accloc} ) &&
+		    ( ! exists $book->{class} ) &&
+		    ( exists $book->{accno} ) ) {
+			if( ref($book->{accloc}) ) {
+				my $i = 0;
+				foreach ( @{$book->{accloc}} ) {
+					my $room = room_translation( $book->{accloc}->[$i], $documenttype );
+					if ( $room eq "R20" ) {
+						$book->{class} = "R20";
+					}
+					$i ++;
+				}
+			} else {
+				my $room = room_translation( $book->{accloc}, $documenttype );
+				if ( $room eq "R20" ) {
+					$book->{class} = "R20";
+				}
+			}
+		}
+
 		# item
 		if (( exists $book->{accloc} ) &&
 		    ( exists $book->{class} ) &&
 		    ( exists $book->{accno} ) ) {
-			if( ref($book->{accloc}) ) {
+			if( ref($book->{accno}) ) {
+
+				# If some items have no location, we need to report it
+				if ( ! ref($book->{accloc} ) ) {
+					print "Warning: ". $book->{ID}. " Location is missing for one item, using " . $book->{accloc} . " instead,  items are @{$book->{accno}}\n";
+					my $accloc = $book->{accloc};
+					$book->{accloc} = qw();
+					foreach ( @{$book->{accloc}} ) {
+						push(@{$book->{accloc}}, $accloc);
+					}
+				}
+
+				# If one class available, we apply to all items
 				if ( ! ref($book->{class} ) ) {
-					print "Warning: ". $book->{ID}. " Class is missing, using " . $book->{class} . " instead\n";
-					my $class = $book->{class};
+					my $class = class_translation($book->{class});
 					$book->{class} = qw();
 					foreach ( @{$book->{accno}} ) {
 						push(@{$book->{class}}, $class);
 					}
+				} else {
+					my $i = 0;
+					my $class = $book->{class};
+					foreach ( @{$class} ) {
+						$_ = class_translation( $_ );
+					}
+					$book->{class} = qw();
+					foreach ( @{$book->{accno}} ) {
+						push(@{$book->{class}}, "")
+					}
+
+
+					print "$book->{ID}\t [ ";
+					foreach ( @{$class} ) {
+						print	"$_ | "; 
+					}
+					print "]\n";
+
+
+					# Give a class to each item
+					$i = 0;
+					foreach ( @{$book->{accno}} ) {
+						my $room = room_translation( $book->{accloc}->[$i], $documenttype );
+
+						switch ( $room ) {
+							case "LD" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /de B*/ ) {
+											$book->{class}->[$i] = $_; 
+										}
+										if ( $_ =~ /CD */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+										if ( $_ =~ /DVD */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "MacC" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /[0-9]* \/ [A-Z]*/ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "CP" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /U [0-9\.]{3,10} */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "REF" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /U [0-9\.]{3,10} */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "SC" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /SC */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "P/O" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /P\/ */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "LB" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /LB */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							case "R20" {
+									$book->{class}->[$i] = "R20"; 
+								}
+							case "ML" {
+									foreach ( @{$class} ) {
+										if ( $_ =~ /^Ir [0-9\.]{3,10} */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+										if ( $_ =~ /^[0-9\.]{3,10} */ ) {
+											$book->{class}->[$i] = $_; 
+										}
+									}
+								}
+							else { 
+								print( "Warning: location ". $room . " needs to be defined\n"); 
+								}
+						}
+
+						$i ++;
+					}
+
+					# Double check that we have used all the classes available
+					my $found = 0;
+					my $ccheck;
+					my $b;
+					my $nb_class_not_used = 0;
+					foreach $ccheck ( @{$class} ) {
+						$found = 0;
+						foreach $b ( @{$book->{class}} ) {
+							if ($ccheck eq $b) { $found = 1; }
+						}
+						if ( $found == 0 ) {
+							print "$book->{ID}\t ";
+							print( "Warning: Class not used ". $ccheck. "\n" );
+							$nb_class_not_used ++;
+						}
+					}
+
+					# in the case a class is not assigned and the number
+					# of items is the same as the number of class, we just map them 1-to-1
+					if (( $nb_class_not_used > 0 ) and
+						( (scalar @{$class} ) == (scalar @{$book->{accno}}))) {
+						print( "Warning: applied 1-to-1 mapping\n" );
+
+						my $ic = 0;
+						foreach ( @{$class} ) {
+							$book->{class}->[$ic] = $_; 
+							$ic ++;
+						}
+					}
+
+
+					
+					#foreach ( @{$book->{class}} ) {
+					#	print	"All $_ \n"; 
+					#}
+
+	
+					$i = 0;
+					my $c = "";
+					foreach ( @{$book->{accno}} ) {
+						my $room = room_translation( $book->{accloc}->[$i], $documenttype );
+						$c = " Error: missing class";
+						$c = " --> " . $book->{class}->[$i] if $book->{class}->[$i] ne "";
+						print "\t".$book->{accno}->[$i]. "\t" . $room. "\t". $c , "\n";
+						$i ++;
+					}
+					print "-----------------------------------------------------------------------------------\n";
+
+
+					#print "Warning: ". $book->{ID}. " Class is missing, using " . $book->{class} . " instead\n";
+
+					#if ( @{$book->{accno}} !=  @{$book->{class}} ) {
+					#	print "Error: class array is different size than accno array for record " . "$book->{ID} : [ @{$book->{accno}} ]  [ @{$book->{class}} ]" . "\n"; 
+					#}
+
 				}
 
 				my $i = 0;
-				foreach ( @{$book->{accloc}} ) {
-					my $room = room_translation( $book->{accloc}->[$i] );
-					# TODO if medium = MI and room = LD  then room = P/O
+				#print( $book->{ID} .   "\n" );
+				foreach ( @{$book->{accno}} ) {
+					my $room = room_translation( $book->{accloc}->[$i], $documenttype );
+					my ($itemstatus, $itemnotforloan, $itemlost)  = status_translation( $book->{accstatus}->[$i] ); 
+					my $itemloantype = loantype_translation( $book->{accloantype}->[$i] ); 
 					my $item = MARC::Field->new(
 						'952',1,'',
 							#8 => $documenttype,
+							1 => $itemlost,
+							5 => $itemloantype,
+							7 => $itemnotforloan,
 							a => "SCS",
 							b => $location,
 							c => $room,
@@ -474,15 +736,23 @@ foreach my $book (@{$booklist->{record}}) {
 					$documentcountitems ++;
 				}
 			} else {
-				my $room = room_translation( $book->{accloc} );
-				# TODO if medium = MI and room = LD  then room = P/O
+				# In the case of a single item:
+
+				#print	"All $book->{class}\n"; 
+				my $room = room_translation( $book->{accloc}, $documenttype );
+				my $class = class_translation( $book->{class} ); 
+				my ($itemstatus, $itemnotforloan, $itemlost)  = status_translation( $book->{accstatus} ); 
+				my $itemloantype = loantype_translation( $book->{accloantype} ); 
 				my $item = MARC::Field->new(
 					'952',1,'',
 						#8 => $documenttype,
+						1 => $itemlost,
+						5 => $itemloantype,
+						7 => $itemnotforloan,
 						a => "SCS",
 						b => $location,
 						c => $room,
-						o => $book->{class},
+						o => $class,
 						p => $accprefix . $book->{accno},
 						y => $documenttype
 				);
@@ -513,7 +783,8 @@ foreach my $book (@{$booklist->{record}}) {
 		if ( exists $book->{holdings} ) {
 			if( ref($book->{holdings}) ) {
 				my $i = 0;
-				my $room = room_translation( $book->{ntloc} );
+				#TODO ntloc doesn't exists
+				my $room = room_translation( $book->{ntloc}, $documenttype );
 				foreach ( @{$book->{holdings}} ) {
 					my $item = MARC::Field->new(
 						'952',1,'',
@@ -528,7 +799,7 @@ foreach my $book (@{$booklist->{record}}) {
 					$i ++;
 				}
 			} else {
-				my $room = room_translation( $book->{ntloc} );
+				my $room = room_translation( $book->{ntloc}, $documenttype );
 				my $item = MARC::Field->new(
 					'952',1,'',
 						#8 => "JRL",
@@ -541,7 +812,7 @@ foreach my $book (@{$booklist->{record}}) {
 				$record->append_fields($item);
 			}
 		} else {
-			print "Cannot create item ". $book->{ID} . "\n";
+			print "Information: Non-existant holding ". $book->{ID} . "\n";
 		}
 	}
 
@@ -618,7 +889,7 @@ foreach my $book (@{$booklist->{record}}) {
 		$record->append_fields($r260);
 	}
 
-	if ( ! $documenttype eq "J" ) {
+	if ( $documenttype ne "J" ) {
 		# collation
 		if ( exists $book->{collation} ) {
 			my $collation;
@@ -665,10 +936,34 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
+	# keywords
+	if ( exists $book->{keywords} ) {
+		my $keywords;
+		if( ref($book->{keywords}) ) {
+			foreach ( @{$book->{keywords}} ) {
+				$keywords = MARC::Field->new(
+					'690',1,'',
+						a => $_ #book->{keywords}
+				);
+				$record->append_fields($keywords);
+			}
+		} else {
+			$keywords = MARC::Field->new(
+				'690',1,'',
+				a => $book->{keywords}
+			);
+			$record->append_fields($keywords);
+		}
+	}
+
 	# series
 	my $series = "";
 	if ( exists $book->{series} ) {
 		$series = $book->{series};
+		$series =~ s/Maoileachlainnn/Maoileachlainn/g;
+		#if ( $series =~ /Maoil/ ) {
+		#	print "Maoil " . $book->{accloc} . "\n";
+		#}
 	}
 
 	# seriesno
@@ -687,7 +982,7 @@ foreach my $book (@{$booklist->{record}}) {
 
 	# lng
 	my $lng;
-	if ( ! $documenttype eq "J" ) {
+	if ( $documenttype ne "J" ) {
 		$lng = "110714s||||||||xx||||||||||||||||||eng|d";
 	} else {
 		# Language left as undefined for Serials
@@ -713,14 +1008,37 @@ foreach my $book (@{$booklist->{record}}) {
 		}
 	}
 
+	# associated
+	foreach my $assoc  (@{$assoclist->{record}}) {
+		# stdno
+		if ( exists $assoc->{stdno} ) {
+			my $assoc_stdno;
+			foreach ( $assoc->{stdno} ) {
 
+				if ( $assoc->{stdno} eq $book->{stdno} ) {
+					my $notes = "";
+					if (exists $assoc->{notes}) {
+						$notes = $assoc->{notes};
+					}
+
+					print( "Info: " . $book->{ID}. " ->> ". $notes . " " .$assoc->{url} . "\n" );
+					my $assoc_url_note = MARC::Field->new('500',1,'',a => "URL: " . $notes . " <a href='" . $assoc->{url} . "'>". $assoc->{url} . "</a>");
+					$record->append_fields($assoc_url_note);
+				}
+
+			}
+		}
+
+	}
+
+	# Write the new MARC record
 	print $fh $record->as_usmarc();
 	$documentcount ++;
 
 	# Not freeing the memory, but it doesn't matter =-D
 }
 
-print $documentcount, " ", $documentcountitems, " ", $documentr20, " ", $documenttypeunknown, "\n";
+print "Records:", $documentcount, " Items:", $documentcountitems, " Skipped:", $documentskip, " Unknown:", $documenttypeunknown, " Total:", $documentcount+$documentskip, "\n";
 
 close($fh);
 
