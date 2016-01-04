@@ -143,6 +143,7 @@ sub loantype_translation {
 		case "SPECIAL COLLECTION"	{	$loantype = 4; }
 		case "Short loan"		{	$loantype = 4; }
 		case "Standard loan"		{	$loantype = 3; }
+		case "Processing"		{	$loantype = 5; }
 		else				{	print "Warning: Loan type unknown ", $loantype, "\n";
 							$loantype = 0; }
 	}
@@ -259,6 +260,19 @@ my $documentprocessing = 0;
 foreach my $book (@{$booklist->{record}}) {
 
 	# print $book->{ID} . "\n";
+	switch ( $book->{ID} ) {
+		case "9780992636913" {}
+		case "9783942002202" {}
+		case "9781855002302" {}
+		case "9789004285750" {}
+		case "9789027249043" {}
+		case "31261" {}
+		case "31262" {}
+		case "31263" {}
+		case "31264" {}
+		else { next; }
+	}
+
 	$record = MARC::Record->new();
 
 	# add the leader to the record. optional.
@@ -566,11 +580,11 @@ foreach my $book (@{$booklist->{record}}) {
 					}
 
 
-					print "$book->{ID}\t [ ";
-					foreach ( @{$class} ) {
-						print	"$_ | "; 
-					}
-					print "]\n";
+					#print "$book->{ID}\t [ ";
+					#foreach ( @{$class} ) {
+						#print	"$_ | "; 
+					#}
+					#print "]\n";
 
 
 					# Give a class to each item
@@ -666,8 +680,7 @@ foreach my $book (@{$booklist->{record}}) {
 							if ($ccheck eq $b) { $found = 1; }
 						}
 						if ( $found == 0 ) {
-							print "$book->{ID}\t ";
-							print( "Warning: Class not used ". $ccheck. "\n" );
+							#print( "Warning: Class not used ". $ccheck. " for record ID " .$book->{ID} ."\n" );
 							$nb_class_not_used ++;
 						}
 					}
@@ -676,7 +689,7 @@ foreach my $book (@{$booklist->{record}}) {
 					# of items is the same as the number of class, we just map them 1-to-1
 					if (( $nb_class_not_used > 0 ) and
 						( (scalar @{$class} ) == (scalar @{$book->{accno}}))) {
-						print( "Warning: applied 1-to-1 mapping\n" );
+						print( "Info: remapping 1-to-1 record ID " .$book->{ID} ."\n" );
 
 						my $ic = 0;
 						foreach ( @{$class} ) {
@@ -698,10 +711,10 @@ foreach my $book (@{$booklist->{record}}) {
 						my $room = room_translation( $book->{accloc}->[$i], $documenttype );
 						$c = " Error: missing class";
 						$c = " --> " . $book->{class}->[$i] if $book->{class}->[$i] ne "";
-						print "\t".$book->{accno}->[$i]. "\t" . $room. "\t". $c , "\n";
+						#print "\t".$book->{accno}->[$i]. "\t" . $room. "\t". $c , "\n";
 						$i ++;
 					}
-					print "-----------------------------------------------------------------------------------\n";
+					#print "-----------------------------------------------------------------------------------\n";
 
 
 					#print "Warning: ". $book->{ID}. " Class is missing, using " . $book->{class} . " instead\n";
@@ -713,7 +726,7 @@ foreach my $book (@{$booklist->{record}}) {
 				}
 
 				my $i = 0;
-				#print( $book->{ID} .   "\n" );
+				print( $book->{ID} .   "\n" );
 				foreach ( @{$book->{accno}} ) {
 					my $room = room_translation( $book->{accloc}->[$i], $documenttype );
 					my ($itemstatus, $itemnotforloan, $itemlost)  = status_translation( $book->{accstatus}->[$i] ); 
@@ -812,7 +825,7 @@ foreach my $book (@{$booklist->{record}}) {
 				$record->append_fields($item);
 			}
 		} else {
-			print "Information: Non-existant holding ". $book->{ID} . "\n";
+			print "Info: Non-existant holding ". $book->{ID} . "\n";
 		}
 	}
 
@@ -1021,6 +1034,9 @@ foreach my $book (@{$booklist->{record}}) {
 						$notes = $assoc->{notes};
 					}
 
+					if ( $assoc->{url} =~ /^g:\\/ ) {
+						$assoc->{url} =~ s/g:\\.*\\igm ([1-4].odt)/https:\/\/intranet.celt.dias.ie\/Irish_Gold_Mines_List_of_Pamphlets\/IGM_$1/;
+					}
 					print( "Info: " . $book->{ID}. " ->> ". $notes . " " .$assoc->{url} . "\n" );
 					my $assoc_url_note = MARC::Field->new('500',1,'',a => "URL: " . $notes . " <a href='" . $assoc->{url} . "'>". $assoc->{url} . "</a>");
 					$record->append_fields($assoc_url_note);
